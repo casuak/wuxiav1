@@ -114,6 +114,7 @@ type ActionId =
   | "thief-ultimate";
 
 type PlayerProfessionId = "boxer" | "swordsman";
+const DEFAULT_PLAYER_PROFESSION: PlayerProfessionId = "swordsman";
 type EnemyTrigger = "move" | "guard" | "parry" | "attack";
 
 type ActionDef = {
@@ -1187,7 +1188,7 @@ export class DuelInnScene extends CombatUiScene {
   private distance = 3;
   private clock = 0;
   private cardSerial = 0;
-  private selectedProfessionId: PlayerProfessionId = "boxer";
+  private selectedProfessionId: PlayerProfessionId = DEFAULT_PLAYER_PROFESSION;
   private formTrail: FormGlyph[] = [];
   private enemyFormTrail: FormGlyph[] = [];
   private playerTacticHistory: EnemyTrigger[] = [];
@@ -1366,7 +1367,7 @@ export class DuelInnScene extends CombatUiScene {
     this.distance = 3;
     this.clock = 0;
     this.cardSerial = 0;
-    this.selectedProfessionId = "boxer";
+    this.selectedProfessionId = DEFAULT_PLAYER_PROFESSION;
     this.formTrail = [];
     this.enemyFormTrail = [];
     this.playerTacticHistory = [];
@@ -1421,7 +1422,7 @@ export class DuelInnScene extends CombatUiScene {
     this.roundText = this.text(270, 25, "第1合", {
       fontSize: "11px",
       fontStyle: "bold",
-      color: css(BOXER_ACCENT),
+      color: css(this.playerProfession.accent),
     }).setOrigin(0.5);
     this.headerButton(374, 24, 78, "返回模式", () => {
       this.resolutionToken += 1;
@@ -1469,7 +1470,7 @@ export class DuelInnScene extends CombatUiScene {
       fontStyle: "bold",
       color: "#5f654d",
     }).setDepth(80);
-    this.bottomSideText = this.text(404, 467, "我方 · 拳师", {
+    this.bottomSideText = this.text(404, 467, `我方 · ${this.playerProfession.label}`, {
       fontSize: "9px",
       fontStyle: "bold",
       color: "#6b5945",
@@ -3790,7 +3791,7 @@ export class DuelInnScene extends CombatUiScene {
     const shade = this.add.rectangle(215, 430, WIDTH, HEIGHT, 0x15170f, 0.7).setInteractive();
     const panel = this.add.rectangle(215, 430, 378, 660, PAPER_LIGHT, 1)
       .setStrokeStyle(3, INK, 1);
-    const seal = this.add.circle(64, 136, 22, BOXER_ACCENT, 1).setStrokeStyle(2, INK, 1);
+    const seal = this.add.circle(64, 136, 22, this.playerProfession.accent, 1).setStrokeStyle(2, INK, 1);
     const sealText = this.text(64, 136, "门", {
       fontSize: "16px",
       fontStyle: "bold",
@@ -3895,10 +3896,10 @@ export class DuelInnScene extends CombatUiScene {
       fontStyle: "bold",
       color: "#5b553f",
     }).setOrigin(0.5);
-    const button = this.add.rectangle(215, 693, 258, 46, BOXER_ACCENT, 1)
+    const button = this.add.rectangle(215, 693, 258, 46, this.playerProfession.accent, 1)
       .setStrokeStyle(2, INK, 1)
       .setInteractive({ useHandCursor: true });
-    const buttonText = this.text(215, 693, "以拳师开始第1合", {
+    const buttonText = this.text(215, 693, `以${this.playerProfession.label}开始第1合`, {
       fontSize: "13px",
       fontStyle: "bold",
       color: "#fff3ca",

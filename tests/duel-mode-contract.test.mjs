@@ -55,8 +55,8 @@ test("the inn mode remains available beside the rebuilt turn duel", () => {
 
 test("the README defines an append-only round log and the current entry follows its fixed format", () => {
   assert.match(readmeSource, /每轮用户任务完成后[\s\S]*?CHANGELOG\.txt[\s\S]*?末尾追加一条记录，不得覆盖或改写既有记录/);
-  assert.match(readmeSource, /\[YYYY-MM-DD HH:mm:ss \+09:00\][\s\S]*?任务：[\s\S]*?要求：[\s\S]*?完成情况：[\s\S]*?验证：[\s\S]*?状态：已完成 \| 部分完成 \| 受阻[\s\S]*?涉及文件：[\s\S]*?---/);
-  assert.match(changelogSource, /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+09:00\]\n任务：.+\n要求：\n/m);
+  assert.match(readmeSource, /\[YYYY-MM-DD HH:mm:ss \+08:00\][\s\S]*?任务：[\s\S]*?要求：[\s\S]*?完成情况：[\s\S]*?验证：[\s\S]*?状态：已完成 \| 部分完成 \| 受阻[\s\S]*?涉及文件：[\s\S]*?---/);
+  assert.match(changelogSource, /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+08:00\]\n任务：.+\n要求：\n/m);
   assert.match(changelogSource, /\n完成情况：\n(?:- .+\n)+验证：\n(?:- .+\n)+状态：(已完成|部分完成|受阻)\n涉及文件：\n(?:- .+\n)+---\n?$/);
 });
 
@@ -111,6 +111,14 @@ test("opening role choice swaps player kits while the opponent remains an indepe
   assert.match(combatSource, /this\.player\.maxHp = profession\.maxHp/);
   assert.match(combatSource, /拳师与剑客只属于玩家；本局敌手固定为盗贼·夜枭/);
   assert.match(combatSource, /this\.add\.image\(94, y, definition\.portraitTexture, 0\)/);
+});
+
+test("swordsman is the default player profession", () => {
+  assert.match(combatSource, /const DEFAULT_PLAYER_PROFESSION: PlayerProfessionId = "swordsman"/);
+  assert.match(combatSource, /private selectedProfessionId: PlayerProfessionId = DEFAULT_PLAYER_PROFESSION/);
+  assert.match(combatSource, /private resetRuntimeState\(\) \{[\s\S]*?this\.selectedProfessionId = DEFAULT_PLAYER_PROFESSION/);
+  assert.match(combatSource, /`我方 · \$\{this\.playerProfession\.label\}`/);
+  assert.match(combatSource, /`以\$\{this\.playerProfession\.label\}开始第1合`/);
 });
 
 test("advance and retreat are permanent ordered actions outside the draw pile", () => {
