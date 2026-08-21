@@ -19,6 +19,7 @@ const OCHRE = 0xc58a35;
 const DEFENSE_BROWN = 0x96612f;
 const BOXER_ACCENT = 0xa94a35;
 const SWORD_ACCENT = 0x2e7774;
+const THIEF_ACCENT = 0x7d3f32;
 const ARENA_TOP = 158;
 const ARENA_BOTTOM = 492;
 const ARENA_CENTER_Y = (ARENA_TOP + ARENA_BOTTOM) / 2;
@@ -29,6 +30,7 @@ const DISTANCE_STEP_PIXELS = 22;
 const CALLOUT_X = 26;
 const CALLOUT_Y = 190;
 const MAX_MOMENTUM = 6;
+const MAX_RETREAT = 2;
 const HAND_LIMIT = 4;
 const PLAN_LIMIT = 2;
 const MIN_DISTANCE = 1;
@@ -75,12 +77,12 @@ class DuelCombatPostFX extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
   }
 }
 
-type FighterId = "boxer" | "swordsman";
+type FighterId = "boxer" | "swordsman" | "thief";
 type Facing = "up" | "down";
 type BattlePhase = "intro" | "planning" | "resolving" | "review" | "ended";
 type ActionType = "move" | "guard" | "parry" | "attack";
 type ComboKind = "press" | "counter" | "bait" | "borrow" | "chain" | "cover" | "probe" | "draw" | "ultimate" | "steady";
-type FormGlyph = "架" | "化" | "冲" | "肘" | "崩" | "截" | "探" | "封" | "刺" | "斩" | "藏" | "绝";
+type FormGlyph = "架" | "化" | "冲" | "肘" | "崩" | "截" | "探" | "封" | "刺" | "斩" | "藏" | "伏" | "诈" | "刃" | "锁" | "夺" | "绝";
 type ActionId =
   | "advance"
   | "retreat"
@@ -102,19 +104,17 @@ type ActionId =
   | "sword-ultimate"
   | "sword-stars-ultimate"
   | "sword-counter-ultimate"
-  | "enemy-step"
-  | "enemy-retreat"
-  | "enemy-guard"
-  | "enemy-thrust"
-  | "enemy-sweep"
-  | "enemy-boxer-step"
-  | "enemy-boxer-retreat"
-  | "enemy-boxer-guard"
-  | "enemy-boxer-punch"
-  | "enemy-boxer-elbow"
-  | "enemy-boxer-break";
+  | "thief-step"
+  | "thief-retreat"
+  | "thief-feint"
+  | "thief-slash"
+  | "thief-hook"
+  | "thief-plunder"
+  | "thief-break"
+  | "thief-ultimate";
 
-type PlayerProfessionId = FighterId;
+type PlayerProfessionId = "boxer" | "swordsman";
+type EnemyTrigger = "move" | "guard" | "parry" | "attack";
 
 type ActionDef = {
   id: ActionId;
@@ -149,6 +149,19 @@ type ActionDef = {
   counterRetreat?: boolean;
   counterRetreatSelf?: boolean;
   bleed?: number;
+  stealMomentum?: number;
+  scatterForm?: number;
+  punishesParry?: number;
+};
+
+type EnemyIntentPlan = {
+  first: ActionId;
+  defaultSecond: ActionId;
+  branch?: {
+    trigger: EnemyTrigger;
+    action: ActionId;
+    label: string;
+  };
 };
 
 type IntentEffectToken = {
@@ -169,6 +182,7 @@ type FighterState = {
   maxHp: number;
   guard: number;
   momentum: number;
+  retreat: number;
   parryReady: boolean;
   evadeBeat: number;
   staggeredBeat: number;
@@ -229,6 +243,15 @@ type ProfessionDef = {
   deck: ActionId[];
 };
 
+type EnemyDef = {
+  label: string;
+  fighterId: "thief";
+  fighterName: string;
+  subtitle: string;
+  maxHp: number;
+  accent: number;
+};
+
 type BeatRecord = {
   heading: string;
   playerAction: string;
@@ -251,7 +274,7 @@ const ACTIONS: Record<ActionId, ActionDef> = {
     type: "move",
     speed: 4,
     distanceDelta: -1,
-    description: "抢近1步；接攻击可破护架。",
+    description: "抢近1步并恢复1点退路；接攻击可破护架。",
   },
   retreat: {
     id: "retreat",
@@ -261,7 +284,7 @@ const ACTIONS: Record<ActionId, ActionDef> = {
     type: "move",
     speed: 4,
     distanceDelta: 1,
-    description: "拉远1步；本拍闪开较慢攻击。",
+    description: "消耗1点退路拉远1步；本拍闪开较慢攻击。",
   },
   guard: {
     id: "guard",
@@ -546,130 +569,124 @@ const ACTIONS: Record<ActionId, ActionDef> = {
     counterRetreatSelf: true,
     description: "速绝：封、化任意先后成式；耗2势避击燕返，并退开一步。",
   },
-  "enemy-step": {
-    id: "enemy-step",
-    owner: "swordsman",
-    title: "探步寻隙",
-    glyph: "探",
+  "thief-step": {
+    id: "thief-step",
+    owner: "thief",
+    title: "伏身摸近",
+    glyph: "伏",
     type: "move",
-    speed: 3,
+    speed: 4,
     distanceDelta: -1,
-    description: "向前试探1步。",
+    form: "伏",
+    momentumGain: 1,
+    description: "贴地抢近1步，落“伏”式并积1势；逼近可恢复1点退路。",
   },
-  "enemy-retreat": {
-    id: "enemy-retreat",
-    owner: "swordsman",
-    title: "虚步抽身",
-    glyph: "虚",
+  "thief-retreat": {
+    id: "thief-retreat",
+    owner: "thief",
+    title: "翻墙抽身",
+    glyph: "遁",
     type: "move",
     speed: 4,
     distanceDelta: 1,
-    description: "后撤1步并闪开较慢攻击。",
+    description: "消耗1点退路后拉远1步，并闪开较慢攻击。",
   },
-  "enemy-guard": {
-    id: "enemy-guard",
-    owner: "swordsman",
-    title: "横剑封门",
-    glyph: "封",
+  "thief-feint": {
+    id: "thief-feint",
+    owner: "thief",
+    title: "抛沙诈手",
+    glyph: "诈",
     type: "guard",
-    speed: 3,
-    guard: 8,
-    description: "获得8点护架。",
+    speed: 4,
+    guard: 4,
+    form: "诈",
+    momentumGain: 1,
+    punishesParry: 5,
+    scatterForm: 1,
+    description: "佯攻后架4护架、落“诈”式并积1势；若对手正在化劲，则穿过空门造成5伤并震散最新一式。",
   },
-  "enemy-thrust": {
-    id: "enemy-thrust",
-    owner: "swordsman",
-    title: "青锋直刺",
-    glyph: "刺",
+  "thief-slash": {
+    id: "thief-slash",
+    owner: "thief",
+    title: "短刃割喉",
+    glyph: "刃",
     type: "attack",
-    speed: 2,
-    damage: 9,
-    minRange: 2,
-    maxRange: 3,
-    description: "二至三步9伤。",
-  },
-  "enemy-sweep": {
-    id: "enemy-sweep",
-    owner: "swordsman",
-    title: "回锋横斩",
-    glyph: "斩",
-    type: "attack",
-    speed: 1,
-    damage: 11,
-    guardBreak: 4,
+    speed: 4,
+    damage: 7,
     minRange: 1,
     maxRange: 2,
-    knockback: true,
-    description: "一至二步11伤；破4护架并逼退。",
+    form: "刃",
+    momentumGain: 1,
+    description: "一至二步快斩7伤，落“刃”式并积1势。",
   },
-  "enemy-boxer-step": {
-    id: "enemy-boxer-step",
-    owner: "boxer",
-    title: "猿步抢门",
-    glyph: "进",
-    type: "move",
-    speed: 4,
-    distanceDelta: -1,
-    description: "拳师抢近1步。",
-  },
-  "enemy-boxer-retreat": {
-    id: "enemy-boxer-retreat",
-    owner: "boxer",
-    title: "垫步抽身",
-    glyph: "退",
-    type: "move",
-    speed: 4,
-    distanceDelta: 1,
-    description: "拳师后撤1步并闪开慢招。",
-  },
-  "enemy-boxer-guard": {
-    id: "enemy-boxer-guard",
-    owner: "boxer",
-    title: "沉肘护中",
-    glyph: "架",
-    type: "guard",
+  "thief-hook": {
+    id: "thief-hook",
+    owner: "thief",
+    title: "钩索封步",
+    glyph: "锁",
+    type: "attack",
     speed: 3,
-    guard: 9,
-    description: "拳师架起9点护架。",
+    damage: 6,
+    minRange: 1,
+    maxRange: 3,
+    form: "锁",
+    momentumGain: 1,
+    interceptsMove: true,
+    bonusDamage: 6,
+    description: "一至三步6伤；撞上对手步法时额外+6并截停当拍。",
   },
-  "enemy-boxer-punch": {
-    id: "enemy-boxer-punch",
-    owner: "boxer",
-    title: "进步冲拳",
-    glyph: "冲",
+  "thief-plunder": {
+    id: "thief-plunder",
+    owner: "thief",
+    title: "探囊夺势",
+    glyph: "夺",
     type: "attack",
     speed: 3,
     damage: 8,
     minRange: 1,
-    maxRange: 1,
-    description: "贴身8伤。",
+    maxRange: 2,
+    form: "夺",
+    momentumGain: 1,
+    stealMomentum: 1,
+    scatterForm: 1,
+    description: "一至二步8伤；命中后夺1势，并震散对手最新一式。",
   },
-  "enemy-boxer-elbow": {
-    id: "enemy-boxer-elbow",
-    owner: "boxer",
-    title: "拗步顶肘",
-    glyph: "肘",
-    type: "attack",
-    speed: 2,
-    damage: 10,
-    minRange: 1,
-    maxRange: 1,
-    stagger: true,
-    description: "贴身10伤；命中打断后一招。",
-  },
-  "enemy-boxer-break": {
-    id: "enemy-boxer-break",
-    owner: "boxer",
-    title: "烈山靠",
-    glyph: "靠",
+  "thief-break": {
+    id: "thief-break",
+    owner: "thief",
+    title: "开山短斩",
+    glyph: "斩",
     type: "attack",
     speed: 1,
     damage: 14,
-    guardBreak: 7,
+    guardBreak: 8,
     minRange: 1,
     maxRange: 1,
     knockback: true,
-    description: "蓄力重靠14伤；破7护架并震退。",
+    form: "斩",
+    description: "贴身重斩14伤；先破8护架，再把对手逼退1步。",
+  },
+  "thief-ultimate": {
+    id: "thief-ultimate",
+    owner: "thief",
+    title: "夜枭·三闪夺命",
+    glyph: "枭",
+    type: "attack",
+    speed: 4,
+    damage: 24,
+    guardBreak: 99,
+    minRange: 1,
+    maxRange: 2,
+    stagger: true,
+    form: "绝",
+    requiresForms: ["伏", "诈", "刃"],
+    requiresMomentum: 4,
+    consumeMomentum: 4,
+    ultimate: true,
+    pierceGuard: true,
+    multiHit: [5, 7, 12],
+    bleed: 2,
+    description: "盗贼重绝：伏、诈、刃齐备且有4势时，在一至二步发动三段贯甲快斩并留下流血。",
   },
 };
 
@@ -714,6 +731,15 @@ const PLAYER_PROFESSIONS: Record<PlayerProfessionId, ProfessionDef> = {
   },
 };
 
+const THIEF_ENEMY: EnemyDef = {
+  label: "盗贼",
+  fighterId: "thief",
+  fighterName: "盗贼 · 夜枭",
+  subtitle: "诡刃 · 诈手封步与夺势",
+  maxHp: 62,
+  accent: THIEF_ACCENT,
+};
+
 const SPEED_LABEL: Record<ActionDef["speed"], string> = {
   1: "慢",
   2: "稳",
@@ -728,6 +754,7 @@ function actionColor(action: ActionDef) {
   if (action.type === "attack") {
     if (action.owner === "swordsman") return SWORD_ACCENT;
     if (action.owner === "boxer") return BOXER_ACCENT;
+    if (action.owner === "thief") return THIEF_ACCENT;
     return RED;
   }
   if (action.type === "move") return TEAL;
@@ -790,6 +817,8 @@ function intentEffectTokens(action: ActionDef): IntentEffectToken[] {
   }
   if (action.type === "parry") tokens.push({ label: "化", color: TEAL });
   if ((action.guardBreak ?? 0) > 0) tokens.push({ label: `破${action.guardBreak}`, color: DEFENSE_BROWN });
+  if ((action.stealMomentum ?? 0) > 0) tokens.push({ label: `夺${action.stealMomentum}`, color: THIEF_ACCENT });
+  if ((action.punishesParry ?? 0) > 0) tokens.push({ label: "诈化", color: THIEF_ACCENT });
   if (action.knockback) tokens.push({ label: "↓1", color: TEAL });
   if (action.stagger) tokens.push({ label: "断", color: RED });
   return tokens.slice(0, 3);
@@ -797,6 +826,22 @@ function intentEffectTokens(action: ActionDef): IntentEffectToken[] {
 
 function isAttack(action: ActionDef | undefined) {
   return action?.type === "attack";
+}
+
+function triggerForAction(action: ActionDef): EnemyTrigger {
+  if (action.type === "move") return "move";
+  if (action.type === "guard") return "guard";
+  if (action.type === "parry") return "parry";
+  return "attack";
+}
+
+function triggerLabel(trigger: EnemyTrigger) {
+  return {
+    move: "你先移动",
+    guard: "你先架招",
+    parry: "你先化劲",
+    attack: "你先抢攻",
+  }[trigger];
 }
 
 function comboFor(first: ActionDef, second: ActionDef): ComboKind {
@@ -859,6 +904,18 @@ const POSE_METRICS: Record<`${FighterId}-${Facing}`, ReadonlyArray<PoseMetric>> 
     { footX: 265, footY: 475, shadowWidth: 50, shadowHeight: 11 },
     { footX: 270, footY: 431, shadowWidth: 64, shadowHeight: 12 },
     { footX: 234, footY: 443, shadowWidth: 66, shadowHeight: 13 },
+  ],
+  "thief-down": [
+    { footX: 382, footY: 493, shadowWidth: 58, shadowHeight: 12 },
+    { footX: 245, footY: 490, shadowWidth: 52, shadowHeight: 11 },
+    { footX: 416, footY: 452, shadowWidth: 66, shadowHeight: 12 },
+    { footX: 152, footY: 441, shadowWidth: 68, shadowHeight: 13 },
+  ],
+  "thief-up": [
+    { footX: 377, footY: 497, shadowWidth: 60, shadowHeight: 12 },
+    { footX: 126, footY: 499, shadowWidth: 52, shadowHeight: 11 },
+    { footX: 354, footY: 436, shadowWidth: 66, shadowHeight: 12 },
+    { footX: 261, footY: 449, shadowWidth: 68, shadowHeight: 13 },
   ],
 };
 
@@ -1132,12 +1189,17 @@ export class DuelInnScene extends CombatUiScene {
   private cardSerial = 0;
   private selectedProfessionId: PlayerProfessionId = "boxer";
   private formTrail: FormGlyph[] = [];
+  private enemyFormTrail: FormGlyph[] = [];
+  private playerTacticHistory: EnemyTrigger[] = [];
+  private enemyRead: EnemyTrigger | null = null;
   private deck: CardInstance[] = [];
   private discard: CardInstance[] = [];
   private hand: CardInstance[] = [];
   private selectedIds: number[] = [];
   private playerPlan: ActionId[] = [];
   private enemyPlan: ActionId[] = [];
+  private enemyIntent!: EnemyIntentPlan;
+  private enemyBranchTriggered: boolean | null = null;
   private records: BeatRecord[] = [];
   private activeBeat = -1;
   private combo: ComboKind = "steady";
@@ -1200,6 +1262,16 @@ export class DuelInnScene extends CombatUiScene {
       "/assets/combat/boxer-turn-poses-down.png",
       { frameWidth: 512, frameHeight: 512 },
     );
+    this.load.spritesheet(
+      "duel-thief-down",
+      "/assets/combat/thief-turn-poses-down.png",
+      { frameWidth: 512, frameHeight: 512 },
+    );
+    this.load.spritesheet(
+      "duel-thief-up",
+      "/assets/combat/thief-turn-poses-up.png",
+      { frameWidth: 512, frameHeight: 512 },
+    );
   }
 
   create() {
@@ -1236,6 +1308,7 @@ export class DuelInnScene extends CombatUiScene {
       maxHp: rival.maxHp,
       guard: 0,
       momentum: 0,
+      retreat: MAX_RETREAT,
       parryReady: false,
       evadeBeat: -1,
       staggeredBeat: -1,
@@ -1254,6 +1327,7 @@ export class DuelInnScene extends CombatUiScene {
       maxHp: profession.maxHp,
       guard: 0,
       momentum: profession.startingMomentum,
+      retreat: MAX_RETREAT,
       parryReady: false,
       evadeBeat: -1,
       staggeredBeat: -1,
@@ -1265,8 +1339,8 @@ export class DuelInnScene extends CombatUiScene {
       rig: playerRig,
     };
 
-    this.enemyHud = this.createFighterHud(14, 75, this.enemy, rival.accent, false);
-    this.playerHud = this.createFighterHud(14, 496, this.player, profession.accent, true);
+    this.enemyHud = this.createFighterHud(14, 75, this.enemy, rival.accent);
+    this.playerHud = this.createFighterHud(14, 496, this.player, profession.accent);
     this.drawPlanner();
     this.drawUltimateArea();
     this.drawHandArea();
@@ -1294,12 +1368,16 @@ export class DuelInnScene extends CombatUiScene {
     this.cardSerial = 0;
     this.selectedProfessionId = "boxer";
     this.formTrail = [];
+    this.enemyFormTrail = [];
+    this.playerTacticHistory = [];
+    this.enemyRead = null;
     this.deck = [];
     this.discard = [];
     this.hand = [];
     this.selectedIds = [];
     this.playerPlan = [];
     this.enemyPlan = [];
+    this.enemyBranchTriggered = null;
     this.records = [];
     this.activeBeat = -1;
     this.combo = "steady";
@@ -1386,7 +1464,7 @@ export class DuelInnScene extends CombatUiScene {
       .setStrokeStyle(1.5, PAPER_LIGHT, 0.95)
       .setDepth(79);
 
-    this.topSideText = this.text(26, 168, "对手 · 剑客", {
+    this.topSideText = this.text(26, 168, "对手 · 盗贼", {
       fontSize: "9px",
       fontStyle: "bold",
       color: "#5f654d",
@@ -1434,7 +1512,6 @@ export class DuelInnScene extends CombatUiScene {
     y: number,
     fighter: FighterState,
     accent: number,
-    isPlayer: boolean,
   ): FighterHud {
     const layer = this.add.container(x, y).setDepth(120);
     const body = this.add.rectangle(201, 38, 402, 76, PAPER_LIGHT, 0.98)
@@ -1465,7 +1542,7 @@ export class DuelInnScene extends CombatUiScene {
       fontStyle: "bold",
       color: css(OCHRE),
     });
-    const statusText = this.text(isPlayer ? 278 : 386, 53, isPlayer ? "势" : "", {
+    const statusText = this.text(278, 53, "势", {
       fontSize: "9px",
       fontStyle: "bold",
       color: css(accent),
@@ -1473,30 +1550,28 @@ export class DuelInnScene extends CombatUiScene {
     layer.add([body, rail, nameText, subtitleText, hpLabel, hpBack, hpFill, hpText, guardText, statusText]);
     const momentumDots: Phaser.GameObjects.Arc[] = [];
     const formTexts: Phaser.GameObjects.Text[] = [];
-    if (isPlayer) {
-      const formLabel = this.text(82, 53, "式", {
+    const formLabel = this.text(82, 53, "式", {
+      fontSize: "9px",
+      fontStyle: "bold",
+      color: "#6b6247",
+    });
+    layer.add(formLabel);
+    for (let index = 0; index < 3; index += 1) {
+      const formCircle = this.add.circle(111 + index * 24, 58, 8, 0xe3d7a6, 0.88)
+        .setStrokeStyle(1.1, accent, 0.52);
+      const formText = this.text(111 + index * 24, 58, "·", {
         fontSize: "9px",
         fontStyle: "bold",
-        color: "#6b6247",
-      });
-      layer.add(formLabel);
-      for (let index = 0; index < 3; index += 1) {
-        const formCircle = this.add.circle(111 + index * 24, 58, 8, 0xe3d7a6, 0.88)
-          .setStrokeStyle(1.1, accent, 0.52);
-        const formText = this.text(111 + index * 24, 58, "·", {
-          fontSize: "9px",
-          fontStyle: "bold",
-          color: css(accent),
-        }).setOrigin(0.5);
-        formTexts.push(formText);
-        layer.add([formCircle, formText]);
-      }
-      for (let index = 0; index < MAX_MOMENTUM; index += 1) {
-        const dot = this.add.circle(296 + index * 15, 58, 5.5, 0xd9cb92, 0.7)
-          .setStrokeStyle(1.2, INK, 0.42);
-        momentumDots.push(dot);
-        layer.add(dot);
-      }
+        color: css(accent),
+      }).setOrigin(0.5);
+      formTexts.push(formText);
+      layer.add([formCircle, formText]);
+    }
+    for (let index = 0; index < MAX_MOMENTUM; index += 1) {
+      const dot = this.add.circle(296 + index * 15, 58, 5.5, 0xd9cb92, 0.7)
+        .setStrokeStyle(1.2, INK, 0.42);
+      momentumDots.push(dot);
+      layer.add(dot);
     }
     return { rail, nameText, subtitleText, hpFill, hpText, guardText, statusText, momentumDots, formTexts };
   }
@@ -1672,7 +1747,7 @@ export class DuelInnScene extends CombatUiScene {
   }
 
   private get opponentProfession() {
-    return PLAYER_PROFESSIONS[this.selectedProfessionId === "boxer" ? "swordsman" : "boxer"];
+    return THIEF_ENEMY;
   }
 
   private fighterLabel(fighter: FighterState) {
@@ -1699,6 +1774,9 @@ export class DuelInnScene extends CombatUiScene {
     this.distance = 3;
     this.cardSerial = 0;
     this.formTrail = [];
+    this.enemyFormTrail = [];
+    this.playerTacticHistory = [];
+    this.enemyRead = null;
     this.deck = [];
     this.discard = [];
     this.hand = [];
@@ -1711,6 +1789,7 @@ export class DuelInnScene extends CombatUiScene {
     this.player.hp = profession.maxHp;
     this.player.guard = 0;
     this.player.momentum = profession.startingMomentum;
+    this.player.retreat = MAX_RETREAT;
     this.player.parryReady = false;
     this.player.sealedActions = 0;
     this.player.counterDamage = 0;
@@ -1725,6 +1804,7 @@ export class DuelInnScene extends CombatUiScene {
     this.enemy.hp = rival.maxHp;
     this.enemy.guard = 0;
     this.enemy.momentum = 0;
+    this.enemy.retreat = MAX_RETREAT;
     this.enemy.parryReady = false;
     this.enemy.sealedActions = 0;
     this.enemy.counterDamage = 0;
@@ -1765,7 +1845,9 @@ export class DuelInnScene extends CombatUiScene {
     this.ultimateDetailLayer.removeAll(true);
     this.combo = "steady";
     this.drawToHand();
-    this.enemyPlan = this.chooseEnemyPlan();
+    this.enemyIntent = this.chooseEnemyPlan();
+    this.enemyPlan = [this.enemyIntent.first, this.enemyIntent.defaultSecond];
+    this.enemyBranchTriggered = null;
     this.phase = initial ? "intro" : "planning";
     this.player.rig.resetPose();
     this.enemy.rig.resetPose();
@@ -1788,38 +1870,74 @@ export class DuelInnScene extends CombatUiScene {
     }
   }
 
-  private chooseEnemyPlan(): ActionId[] {
-    const variant = (this.round + Phaser.Math.Between(0, 1)) % 2;
-    if (this.enemy.id === "boxer") {
-      if (this.distance >= 4) return ["enemy-boxer-step", "enemy-boxer-step"];
-      if (this.distance === 3) {
-        return variant === 0
-          ? ["enemy-boxer-step", "enemy-boxer-punch"]
-          : ["enemy-boxer-guard", "enemy-boxer-step"];
-      }
-      if (this.distance === 2) {
-        return variant === 0
-          ? ["enemy-boxer-step", "enemy-boxer-elbow"]
-          : ["enemy-boxer-guard", "enemy-boxer-step"];
-      }
-      return variant === 0
-        ? ["enemy-boxer-guard", "enemy-boxer-break"]
-        : ["enemy-boxer-punch", "enemy-boxer-elbow"];
+  private chooseEnemyPlan(): EnemyIntentPlan {
+    const ultimate = ACTIONS["thief-ultimate"];
+    const ultimateReady = this.actionLockReason(
+      ultimate,
+      this.enemyFormTrail,
+      this.enemy.momentum,
+      this.distance,
+    ) === null;
+    if (ultimateReady) {
+      return {
+        first: "thief-feint",
+        defaultSecond: "thief-ultimate",
+        branch: { trigger: "move", action: "thief-hook", label: "移动则以钩索截步，不强行空放绝招" },
+      };
     }
-    if (this.distance >= 4) return ["enemy-step", "enemy-thrust"];
+    if (this.enemyRead === "attack" && this.enemy.retreat > 0) {
+      return {
+        first: "thief-feint",
+        defaultSecond: "thief-slash",
+        branch: { trigger: "attack", action: "thief-retreat", label: "抢攻则抽身闪避慢招" },
+      };
+    }
+    if (this.enemyRead === "guard" && this.distance === 2) {
+      return {
+        first: "thief-step",
+        defaultSecond: "thief-plunder",
+        branch: { trigger: "guard", action: "thief-break", label: "架招则改用重斩破护" },
+      };
+    }
+    if (this.distance >= 4) {
+      return {
+        first: "thief-step",
+        defaultSecond: "thief-hook",
+        branch: { trigger: "attack", action: "thief-retreat", label: "远处抢攻则翻身抽离，不白送追击" },
+      };
+    }
     if (this.distance === 3) {
-      return variant === 0
-        ? ["enemy-thrust", "enemy-guard"]
-        : ["enemy-step", "enemy-thrust"];
+      return {
+        first: "thief-step",
+        defaultSecond: "thief-slash",
+        branch: { trigger: "move", action: "thief-hook", label: "移动则改用钩索封步" },
+      };
     }
     if (this.distance === 2) {
-      return variant === 0
-        ? ["enemy-guard", "enemy-sweep"]
-        : ["enemy-thrust", "enemy-sweep"];
+      return {
+        first: "thief-feint",
+        defaultSecond: "thief-slash",
+        branch: { trigger: "parry", action: "thief-feint", label: "化劲则继续诈手打空门" },
+      };
     }
-    return variant === 0
-      ? ["enemy-retreat", "enemy-thrust"]
-      : ["enemy-guard", "enemy-sweep"];
+    return {
+      first: "thief-slash",
+      defaultSecond: "thief-break",
+      branch: { trigger: "parry", action: "thief-feint", label: "化劲则收刀诈手，不送实招" },
+    };
+  }
+
+  private resolveEnemySecondAction() {
+    const branch = this.enemyIntent.branch;
+    if (!branch) return;
+    const playerOpening = ACTIONS[this.playerPlan[0]];
+    const triggered = triggerForAction(playerOpening) === branch.trigger;
+    this.enemyBranchTriggered = triggered;
+    this.enemyPlan[1] = triggered ? branch.action : this.enemyIntent.defaultSecond;
+    this.renderEnemyIntent();
+    if (triggered) {
+      this.showCallout(`盗贼变招\n${branch.label}`, THIEF_ACCENT, 820);
+    }
   }
 
   private renderEnemyIntent() {
@@ -1867,6 +1985,14 @@ export class DuelInnScene extends CombatUiScene {
         this.showEnemyIntentDetail(index);
       });
       this.intentLayer.add([body, glyph, title]);
+      if (index === 1 && this.enemyIntent.branch) {
+        const branchMark = this.text(x + 31, 116, "变", {
+          fontSize: "8px",
+          fontStyle: "bold",
+          color: active ? "#fff4cf" : css(THIEF_ACCENT),
+        }).setOrigin(0.5);
+        this.intentLayer.add(branchMark);
+      }
       const tokens = intentEffectTokens(action);
       const widths = tokens.map((token) => Math.max(14, token.label.length * 7 + 5));
       const totalWidth = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, tokens.length - 1) * 2;
@@ -1885,6 +2011,21 @@ export class DuelInnScene extends CombatUiScene {
         cursorX += width + 2;
       });
     });
+    if (this.enemyIntent.branch) {
+      const branch = this.enemyIntent.branch;
+      const branchAction = ACTIONS[branch.action];
+      const state = this.enemyBranchTriggered === true
+        ? `已变：${branchAction.title}`
+        : this.enemyBranchTriggered === false
+          ? `守原：${ACTIONS[this.enemyIntent.defaultSecond].title}`
+          : `若${triggerLabel(branch.trigger)} → ${branchAction.title}`;
+      const branchHint = this.text(244, 149, state, {
+        fontSize: "8px",
+        fontStyle: "bold",
+        color: css(THIEF_ACCENT),
+      }).setFixedSize(162, 10).setDepth(151);
+      this.intentLayer.add(branchHint);
+    }
     this.renderIntentDetail();
   }
 
@@ -1922,12 +2063,16 @@ export class DuelInnScene extends CombatUiScene {
       fontStyle: "bold",
       color: "#5f5940",
     });
-    const description = this.text(58, 252, action.description, {
+    const branch = this.openIntentIndex === 1 ? this.enemyIntent.branch : undefined;
+    const branchDescription = branch
+      ? `${action.description}\n条件变招｜若${triggerLabel(branch.trigger)}，则改用${ACTIONS[branch.action].title}：${branch.label}。`
+      : action.description;
+    const description = this.text(58, 252, branchDescription, {
       fontSize: "9px",
       fontStyle: "bold",
       color: css(INK),
       wordWrap: { width: 272, useAdvancedWrap: true },
-      maxLines: 2,
+      maxLines: 3,
     });
     const closeBody = this.add.rectangle(365, 220, 34, 24, PAPER, 1)
       .setStrokeStyle(1.3, intentAccent, 0.9)
@@ -2113,7 +2258,15 @@ export class DuelInnScene extends CombatUiScene {
       control.labelText
         .setText(`${selected ? `${selectedIndex + 1}·` : ""}${control.uid === FIXED_ADVANCE_UID ? "进↑" : "退↓"}`)
         .setColor(selected ? "#fff4cf" : css(TEAL));
-      control.hintText.setColor(selected ? "#fff4cf" : "#696347");
+      control.hintText
+        .setText(
+          control.uid === FIXED_ADVANCE_UID
+            ? `可复退·${this.player.retreat}`
+            : this.player.retreat > 0
+              ? `退路${this.player.retreat}`
+              : "抵墙",
+        )
+        .setColor(selected ? "#fff4cf" : this.player.retreat > 0 ? "#696347" : css(RED));
       control.body.setAlpha(this.phase === "planning" ? 1 : 0.5);
       control.labelText.setAlpha(this.phase === "planning" ? 1 : 0.55);
       control.hintText.setAlpha(this.phase === "planning" ? 1 : 0.55);
@@ -2123,7 +2276,7 @@ export class DuelInnScene extends CombatUiScene {
       const copy = comboCopy(this.combo);
       this.comboText.setText(`章法·${copy.title}｜${copy.detail}`);
     } else {
-      this.comboText.setText("依次选择两招，进退常驻且不入弃牌");
+      this.comboText.setText("依次选择两招；进可复退，退会消耗退路");
     }
 
     if (this.phase === "planning") {
@@ -2394,23 +2547,24 @@ export class DuelInnScene extends CombatUiScene {
     );
   }
 
-  private recordPlayerForm(action: ActionDef) {
-    if (!action.form) return;
-    if (action.ultimate) {
-      this.formTrail = [];
-      this.spawnFloat(this.player.rig.root.x, this.player.rig.root.y - 48, "绝式贯通", this.playerProfession.accent);
-      return;
+  private recordCombatForm(actor: FighterState, action: ActionDef) {
+    if (!action.form || action.ultimate) return;
+    if (actor === this.player) {
+      this.formTrail.push(action.form);
+      this.formTrail = this.formTrail.slice(-3);
+    } else {
+      this.enemyFormTrail = this.enemyFormTrail.filter((glyph) => glyph !== action.form);
+      this.enemyFormTrail.push(action.form);
+      this.enemyFormTrail = this.enemyFormTrail.slice(-3);
     }
-    this.formTrail.push(action.form);
-    this.formTrail = this.formTrail.slice(-3);
     const gain = action.momentumGain ?? 0;
-    if (gain > 0) this.player.momentum = Math.min(MAX_MOMENTUM, this.player.momentum + gain);
-    this.spawnFormStamp(action.form, gain);
+    if (gain > 0) actor.momentum = Math.min(MAX_MOMENTUM, actor.momentum + gain);
+    this.spawnFormStamp(actor, action.form, gain);
   }
 
-  private spawnFormStamp(form: FormGlyph, gain: number) {
-    const accent = this.playerProfession.accent;
-    const stamp = this.add.circle(this.player.rig.root.x - 48, this.player.rig.root.y, 15, PAPER_LIGHT, 0.96)
+  private spawnFormStamp(actor: FighterState, form: FormGlyph, gain: number) {
+    const accent = this.fighterAccent(actor);
+    const stamp = this.add.circle(actor.rig.root.x - 48, actor.rig.root.y, 15, PAPER_LIGHT, 0.96)
       .setStrokeStyle(2.4, accent, 0.95)
       .setDepth(300)
       .setScale(0.72);
@@ -2440,6 +2594,11 @@ export class DuelInnScene extends CombatUiScene {
     if (currentIndex >= 0) {
       this.selectedIds.splice(currentIndex, 1);
     } else {
+      if (uid === FIXED_RETREAT_UID && this.player.retreat <= 0) {
+        this.showCallout("退路已尽 · 背抵墙面\n先前进或成功化劲恢复退路", RED, 1100);
+        this.footerText.setText("退路已尽：主动前进或成功化劲可恢复1点退路。");
+        return;
+      }
       const candidateIds = [...this.selectedIds];
       if (candidateIds.length < PLAN_LIMIT) candidateIds.push(uid);
       else {
@@ -2526,6 +2685,7 @@ export class DuelInnScene extends CombatUiScene {
 
     for (let beat = 0; beat < PLAN_LIMIT; beat += 1) {
       if (token !== this.resolutionToken || this.phase !== "resolving") return;
+      if (beat === 1) this.resolveEnemySecondAction();
       await this.resolveBeat(beat, token);
       if (token !== this.resolutionToken || this.phase !== "resolving") return;
       if (this.player.hp <= 0 || this.enemy.hp <= 0) {
@@ -2533,6 +2693,14 @@ export class DuelInnScene extends CombatUiScene {
         return;
       }
     }
+
+    await this.settleRoundTradeoffs(token);
+    if (token !== this.resolutionToken || this.phase !== "resolving") return;
+    if (this.player.hp <= 0 || this.enemy.hp <= 0) {
+      this.finishBattle(this.enemy.hp <= 0);
+      return;
+    }
+    this.updateEnemyRead();
 
     this.phase = "review";
     this.activeBeat = 1;
@@ -2542,6 +2710,35 @@ export class DuelInnScene extends CombatUiScene {
     this.renderHand();
     this.syncAll(true);
     this.refreshFooter();
+  }
+
+  private async settleRoundTradeoffs(token: number) {
+    const finalRecord = this.records.at(-1);
+    if (this.player.parryReady) {
+      this.player.parryReady = false;
+      const lostForm = this.formTrail.pop();
+      this.player.hp = Math.max(0, this.player.hp - 3);
+      finalRecord?.lines.push(`化劲未接到实招，空门反噬3伤${lostForm ? `，并震散“${lostForm}”式` : ""}。`);
+      this.showCallout("化劲落空 · 空门\n生命 -3", THIEF_ACCENT, 760);
+      this.spawnFloat(this.player.rig.root.x, this.player.rig.root.y - 40, "空门 -3", RED);
+      await this.animateStagger(this.player, token);
+    }
+    if (!this.playerPlan.some((actionId) => isAttack(ACTIONS[actionId]))) {
+      this.enemy.momentum = Math.min(MAX_MOMENTUM, this.enemy.momentum + 1);
+      finalRecord?.lines.push("本合我方未主动攻击，盗贼借势再积1势。 ");
+      this.spawnFloat(this.enemy.rig.root.x, this.enemy.rig.root.y - 40, "+1势", THIEF_ACCENT);
+    }
+    this.syncAll(true);
+  }
+
+  private updateEnemyRead() {
+    this.playerTacticHistory.push(...this.playerPlan.map((actionId) => triggerForAction(ACTIONS[actionId])));
+    this.playerTacticHistory = this.playerTacticHistory.slice(-6);
+    const recent = this.playerTacticHistory.slice(-4);
+    const counts = new Map<EnemyTrigger, number>();
+    recent.forEach((trigger) => counts.set(trigger, (counts.get(trigger) ?? 0) + 1));
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    this.enemyRead = ranked[0]?.[1] >= 2 ? ranked[0][0] : null;
   }
 
   private async resolveBeat(index: number, token: number) {
@@ -2616,38 +2813,71 @@ export class DuelInnScene extends CombatUiScene {
       await this.animateStagger(actor, token);
       return;
     }
-    if (actor === this.player && action.ultimate) {
-      const reason = this.actionLockReason(action, this.formTrail, actor.momentum, this.distance);
+    if (action.ultimate) {
+      const trail = actor === this.player ? this.formTrail : this.enemyFormTrail;
+      const reason = this.actionLockReason(action, trail, actor.momentum, this.distance);
       if (reason) {
         record.lines.push(`${actorName}${action.title}断式：${reason}。`);
-        this.showCallout(`绝式被拆\n${reason}`, this.opponentProfession.accent, 900);
+        this.showCallout(`绝式被拆\n${reason}`, this.fighterAccent(target), 900);
         await this.animateStagger(actor, token);
         return;
       }
       actor.momentum = Math.max(0, actor.momentum - (action.consumeMomentum ?? 0));
-      this.formTrail = [];
+      if (actor === this.player) this.formTrail = [];
+      else this.enemyFormTrail = [];
+      this.spawnFloat(actor.rig.root.x, actor.rig.root.y - 48, "绝式贯通", this.fighterAccent(actor));
       this.syncAll(true);
       await this.animateUltimateCharge(actor, action, token);
       record.lines.push(`${actorName}${ultimateTier(action)}所需式、势与距离齐备，${action.title}发动。`);
     }
     if (action.type === "move" && action.distanceDelta) {
-      if (action.id === "retreat" || action.id === "enemy-retreat") actor.evadeBeat = beat;
+      if (action.distanceDelta > 0 && actor.retreat <= 0) {
+        record.lines.push(`${actorName}退路已尽、背抵墙面，${action.title}无法发动。`);
+        this.showCallout(`${actorName}抵墙\n已无退路`, this.fighterAccent(target), 760);
+        await this.animateStagger(actor, token);
+        return;
+      }
       const before = this.distance;
       await this.animateDistanceChange(actor, action.distanceDelta, token);
       const verb = action.distanceDelta < 0 ? "逼近" : "拉开";
+      if (before !== this.distance) {
+        if (action.distanceDelta > 0) {
+          actor.retreat = Math.max(0, actor.retreat - 1);
+          actor.evadeBeat = beat;
+        } else {
+          actor.retreat = Math.min(MAX_RETREAT, actor.retreat + 1);
+        }
+        this.recordCombatForm(actor, action);
+      }
       record.lines.push(
         before === this.distance
           ? `${actorName}${action.title}，但已无处可移。`
-          : `${actorName}${verb}1步：距离${before}→${this.distance}。`,
+          : `${actorName}${verb}1步：距离${before}→${this.distance}；退路${actor.retreat}/${MAX_RETREAT}。`,
       );
+      this.syncAll(true);
       return;
     }
     if (action.type === "guard") {
       const bonus = actor === this.player && beat === 1 && this.combo === "cover" ? 3 : 0;
+      if (action.punishesParry && target.parryReady) {
+        target.parryReady = false;
+        const damage = action.punishesParry;
+        target.hp = Math.max(0, target.hp - damage);
+        const targetTrail = target === this.player ? this.formTrail : this.enemyFormTrail;
+        const lost = action.scatterForm ? targetTrail.splice(-action.scatterForm) : [];
+        this.spawnFloat(target.rig.root.x, target.rig.root.y - 38, `诈手 -${damage}`, RED);
+        target.rig.flash();
+        record.lines.push(`${actorName}${action.title}识破化劲空门，直伤${damage}${lost.length ? `并震散“${lost.join("、")}”式` : ""}。`);
+        await this.animateStagger(target, token);
+      }
       actor.guard += (action.guard ?? 0) + bonus;
+      if (actor === this.player) {
+        this.enemy.momentum = Math.min(MAX_MOMENTUM, this.enemy.momentum + 1);
+        record.lines.push("我方选择稳架，盗贼借压迫积1势。 ");
+      }
       await this.animateGuard(actor, token);
       record.lines.push(`${actorName}架起${(action.guard ?? 0) + bonus}点护架。`);
-      if (actor === this.player) this.recordPlayerForm(action);
+      this.recordCombatForm(actor, action);
       this.syncAll(true);
       return;
     }
@@ -2662,13 +2892,13 @@ export class DuelInnScene extends CombatUiScene {
           ? `${actorName}布下绝式反击；化去下一击后回敬${action.counterDamage}伤。`
           : `${actorName}布下化劲，等待下一次攻击。`,
       );
-      if (actor === this.player) this.recordPlayerForm(action);
+      this.recordCombatForm(actor, action);
       this.syncAll(true);
       return;
     }
     const landed = await this.performAttack(actor, target, action, beat, record, token);
-    if (actor === this.player && landed) {
-      this.recordPlayerForm(action);
+    if (landed && !action.ultimate) {
+      this.recordCombatForm(actor, action);
       this.syncAll(true);
     }
   }
@@ -2718,14 +2948,18 @@ export class DuelInnScene extends CombatUiScene {
       damage += action.bonusDamage ?? 0;
       comboNotes.push(`${action.bonusAfterForm}式追击`);
     }
-    if (actor === this.player && action.interceptsMove && opposingAction?.type === "move") {
+    if (action.interceptsMove && opposingAction?.type === "move") {
       damage += action.bonusDamage ?? 0;
       stagger = true;
       comboNotes.push("截步成功");
     }
-    if (actor === this.player && action.punishesGuard && target.guard > 0) {
+    if (action.punishesGuard && target.guard > 0) {
       guardBreak += action.punishesGuard;
       comboNotes.push("问路破门");
+    }
+    if (actor === this.enemy && target.retreat <= 0) {
+      damage += 3;
+      comboNotes.push("抵墙破绽");
     }
     const minRange = action.minRange ?? 0;
     const maxRange = (action.maxRange ?? 0) + rangeBonus;
@@ -2754,6 +2988,7 @@ export class DuelInnScene extends CombatUiScene {
         target.momentum = Math.min(MAX_MOMENTUM, target.momentum + 2);
         this.roundEvents.playerParried = true;
       }
+      target.retreat = Math.min(MAX_RETREAT, target.retreat + 1);
       await this.animateParriedStrike(actor, target, action, token);
       if (counterDamage > 0) {
         actor.hp = Math.max(0, actor.hp - counterDamage);
@@ -2786,6 +3021,17 @@ export class DuelInnScene extends CombatUiScene {
     if (action.bleed && hpDamage > 0) {
       target.bleed = Math.max(target.bleed, action.bleed);
       comboNotes.push(`流血${action.bleed}`);
+    }
+    if (action.stealMomentum && hpDamage > 0) {
+      const stolen = Math.min(target.momentum, action.stealMomentum);
+      target.momentum -= stolen;
+      actor.momentum = Math.min(MAX_MOMENTUM, actor.momentum + stolen);
+      if (stolen > 0) comboNotes.push(`夺${stolen}势`);
+    }
+    if (action.scatterForm && hpDamage > 0) {
+      const targetTrail = target === this.player ? this.formTrail : this.enemyFormTrail;
+      const scattered = targetTrail.splice(-action.scatterForm);
+      if (scattered.length > 0) comboNotes.push(`震散${scattered.join("、")}式`);
     }
     if (target === this.player && hpDamage > 0) {
       target.momentum = Math.max(0, target.momentum - 1);
@@ -2975,8 +3221,7 @@ export class DuelInnScene extends CombatUiScene {
       token,
     );
     actor.rig.setPose(
-      action.id === "enemy-sweep"
-      || action.id === "enemy-boxer-break"
+      action.id === "thief-break"
       || action.id === "sword-sweep"
       || action.id === "break"
       || action.ultimate
@@ -3111,7 +3356,7 @@ export class DuelInnScene extends CombatUiScene {
       ring.postFX.addGlow(TEAL, 1.6, 0.2, false, 0.1, 4);
     }
     this.tweens.add({ targets: ring, scale: 2.2, alpha: 0, duration: 360, onComplete: () => ring.destroy() });
-    this.spawnFloat(target.rig.root.x, target.rig.root.y - 38, "化劲 +2势", TEAL);
+    this.spawnFloat(target.rig.root.x, target.rig.root.y - 38, "化劲 +2势 · 复1退路", TEAL);
     actor.rig.root.setRotation(0.08 * (actor === this.player ? 1 : -1));
     await this.wait(MOTION_ENABLED ? 240 : 1, token);
     await this.tweenTo(
@@ -3276,7 +3521,7 @@ export class DuelInnScene extends CombatUiScene {
       .setDepth(77)
       .setScale(0.88);
     if (actor.id === "swordsman") {
-      const sweeping = action.id === "enemy-sweep" || action.id === "sword-sweep";
+      const sweeping = action.id === "sword-sweep";
       const attackDirection: -1 | 1 = actor === this.player ? -1 : 1;
       const width = action.ultimate ? 6.2 : sweeping ? 5.2 : 3.6;
       const drawSwordPath = () => {
@@ -3302,6 +3547,26 @@ export class DuelInnScene extends CombatUiScene {
         g.lineBetween(-18, 34, 34, -34);
         g.lineBetween(-42, 25, 18, -46);
       }
+    } else if (actor.id === "thief") {
+      const sweeping = action.id === "thief-break" || action.id === "thief-ultimate";
+      const width = action.ultimate ? 6.4 : sweeping ? 5.1 : 3.8;
+      const drawKnifePath = () => {
+        g.beginPath();
+        if (sweeping) g.arc(0, -2, action.ultimate ? 48 : 39, -2.72, 0.18, false);
+        else {
+          g.moveTo(-27, 24);
+          g.lineTo(22, -25);
+        }
+        g.strokePath();
+      };
+      g.lineStyle(width + 3, INK, 0.34);
+      drawKnifePath();
+      g.lineStyle(width, THIEF_ACCENT, 0.98);
+      drawKnifePath();
+      g.lineStyle(1.9, 0xffdf9a, 0.94);
+      g.beginPath();
+      g.arc(0, -2, action.ultimate ? 38 : 29, -2.55, -0.2, false);
+      g.strokePath();
     } else {
       g.fillStyle(INK, 0.16).fillEllipse(0, -3, 42, 31);
       g.fillStyle(accent, 0.22).fillEllipse(0, -3, 36, 27);
@@ -3420,14 +3685,18 @@ export class DuelInnScene extends CombatUiScene {
     this.handLabel.setColor(css(professionAccent));
     this.enemyHud.rail.setFillStyle(this.opponentProfession.accent, 1);
     this.enemyHud.nameText.setColor(css(this.opponentProfession.accent));
+    this.enemyHud.statusText.setColor(css(this.opponentProfession.accent));
     const distanceLabel = this.distance === 1 ? "贴身" : this.distance === 2 ? "中近" : this.distance === 3 ? "剑围" : "远距";
     this.distanceText.setText(`${this.distance}步\n${distanceLabel}`);
     this.distanceText.setY(ARENA_CENTER_Y);
     this.arenaCenterMarker?.setY(ARENA_CENTER_Y);
-    this.topSideText.setText(`对手 · ${this.opponentProfession.label}`);
+    const readLabel = this.enemyRead
+      ? `已看破·${{ move: "步法", guard: "架招", parry: "化劲", attack: "抢攻" }[this.enemyRead]}`
+      : "尚未看破";
+    this.topSideText.setText(`对手 · ${this.opponentProfession.label} · ${readLabel}`);
     this.bottomSideText.setText(`我方 · ${this.playerProfession.label}`);
-    this.playerHud.statusText.setText(this.player.momentum >= MAX_MOMENTUM ? "势满" : "势");
-    this.enemyHud.statusText.setText("");
+    this.playerHud.statusText.setText(`${this.player.momentum >= MAX_MOMENTUM ? "势满" : "势"} · 退${this.player.retreat}`);
+    this.enemyHud.statusText.setText(`${this.enemy.momentum >= MAX_MOMENTUM ? "势满" : "势"} · 退${this.enemy.retreat}`);
     this.playerHud.formTexts.forEach((formText, index) => {
       formText.setText(this.formTrail[index] ?? "·");
       formText.setColor(this.formTrail[index] ? css(professionAccent) : "#8e8564");
@@ -3435,6 +3704,14 @@ export class DuelInnScene extends CombatUiScene {
     this.playerHud.momentumDots.forEach((dot, index) => {
       dot.setFillStyle(index < this.player.momentum ? professionAccent : 0xd9cb92, index < this.player.momentum ? 1 : 0.7);
       dot.setScale(index < this.player.momentum ? 1.08 : 1);
+    });
+    this.enemyHud.formTexts.forEach((formText, index) => {
+      formText.setText(this.enemyFormTrail[index] ?? "·");
+      formText.setColor(this.enemyFormTrail[index] ? css(THIEF_ACCENT) : "#8e8564");
+    });
+    this.enemyHud.momentumDots.forEach((dot, index) => {
+      dot.setFillStyle(index < this.enemy.momentum ? THIEF_ACCENT : 0xd9cb92, index < this.enemy.momentum ? 1 : 0.7);
+      dot.setScale(index < this.enemy.momentum ? 1.08 : 1);
     });
     if (this.ultimateActionControls.length) this.renderUltimateControls();
     this.refreshFooter();
@@ -3462,12 +3739,12 @@ export class DuelInnScene extends CombatUiScene {
   private refreshFooter() {
     if (!this.footerText) return;
     if (this.phase === "intro") {
-      this.footerText.setText("选择拳师或剑客；人物、卡组、动画与三门固定绝式会整套切换。");
+      this.footerText.setText("选择拳师或剑客迎战盗贼；玩家卡组与绝式整套切换，敌人始终使用独立诡刃套路。");
       return;
     }
     if (this.phase === "planning") {
       if (this.selectedIds.length < 2) {
-        this.footerText.setText(`还需选择${2 - this.selectedIds.length}招；招式谱：${this.formTrail.join("→") || "尚未起式"}。`);
+        this.footerText.setText(`还需选择${2 - this.selectedIds.length}招；我方式：${this.formTrail.join("→") || "无"}｜敌方${this.enemy.momentum}势、退路${this.enemy.retreat}。`);
       } else {
         const copy = comboCopy(this.combo);
         this.footerText.setText(`${copy.title}：${copy.detail}。确认后逐拍播放。`);
@@ -3519,13 +3796,13 @@ export class DuelInnScene extends CombatUiScene {
       fontStyle: "bold",
       color: "#fff3ca",
     }).setOrigin(0.5);
-    const title = this.text(98, 119, "择一门派入局", { fontSize: "22px", fontStyle: "bold" });
-    const subtitle = this.text(98, 153, "不是选择加成：人物、动作、牌库与三门绝式都会改变。", {
+    const title = this.text(98, 119, "择一角色迎敌", { fontSize: "22px", fontStyle: "bold" });
+    const subtitle = this.text(98, 153, "拳师与剑客只属于玩家；本局敌手固定为盗贼·夜枭。", {
       fontSize: "10px",
       fontStyle: "bold",
       color: "#625c43",
     });
-    const professionHeading = this.text(36, 188, "选择你的角色与打法", {
+    const professionHeading = this.text(36, 188, "选择你的角色与打法｜敌手：盗贼", {
       fontSize: "12px",
       fontStyle: "bold",
       color: css(BOXER_ACCENT),
@@ -3590,9 +3867,9 @@ export class DuelInnScene extends CombatUiScene {
       color: css(TEAL),
     });
     const rules = [
-      ["读", "敌方两拍完全公开；用距离、速度和拆招回应。"],
+      ["读", "敌方起手、默认合手与条件变招全部公开。"],
       ["搓", "卡牌命中或生效才落式，最近三式留谱；先后顺序不限。"],
-      ["绝", "绝式分速绝、进阶与重绝；触发门槛不同，所需式均不限顺序。"],
+      ["衡", "架会助敌积势，退消耗退路，化空会暴露空门。"],
     ] as const;
     rules.forEach((rule, index) => {
       const y = 493 + index * 42;
@@ -3613,7 +3890,7 @@ export class DuelInnScene extends CombatUiScene {
 
     const recipeBanner = this.add.rectangle(215, 625, 338, 38, 0xe4d69f, 0.72)
       .setStrokeStyle(1.2, INK, 0.42);
-    const recipeText = this.text(215, 625, "前进、后退常驻；绝招进牌库，会占手但不会凭空启动。", {
+    const recipeText = this.text(215, 625, "敌我都有势、三格招式谱与2点退路；前进或化劲成功可复退。", {
       fontSize: "9px",
       fontStyle: "bold",
       color: "#5b553f",

@@ -14,6 +14,8 @@ const innSource = await readFile(
   new URL("../app/game/deckInnGame.ts", import.meta.url),
   "utf8",
 );
+const readmeSource = await readFile(new URL("../README.md", import.meta.url), "utf8");
+const changelogSource = await readFile(new URL("../CHANGELOG.txt", import.meta.url), "utf8");
 const swordsmanAtlas = await readFile(
   new URL("../public/assets/combat/swordsman-turn-poses.png", import.meta.url),
 );
@@ -25,6 +27,12 @@ const swordsmanUpAtlas = await readFile(
 );
 const boxerDownAtlas = await readFile(
   new URL("../public/assets/combat/boxer-turn-poses-down.png", import.meta.url),
+);
+const thiefDownAtlas = await readFile(
+  new URL("../public/assets/combat/thief-turn-poses-down.png", import.meta.url),
+);
+const thiefUpAtlas = await readFile(
+  new URL("../public/assets/combat/thief-turn-poses-up.png", import.meta.url),
 );
 const courtyardBackground = await readFile(
   new URL("../public/assets/combat/duel-courtyard-bg.png", import.meta.url),
@@ -41,8 +49,15 @@ test("the inn mode remains available beside the rebuilt turn duel", () => {
   assert.match(modeSource, /this\.scene\.start\("inn-deckbuilder"\)/);
   assert.match(modeSource, /this\.scene\.start\("inn-duel"\)/);
   assert.match(modeSource, /label: "回合制"/);
-  assert.match(modeSource, /双职业卡池 · 相对距离 · 公开博弈 · 三绝式/);
+  assert.match(modeSource, /双职业卡池 · 盗贼敌手 · 条件变招 · 三绝式/);
   assert.match(innSource, /scene: \[InnModeSelectScene, DeckInnScene, DuelInnScene\]/);
+});
+
+test("the README defines an append-only round log and the current entry follows its fixed format", () => {
+  assert.match(readmeSource, /每轮用户任务完成后[\s\S]*?CHANGELOG\.txt[\s\S]*?末尾追加一条记录，不得覆盖或改写既有记录/);
+  assert.match(readmeSource, /\[YYYY-MM-DD HH:mm:ss \+09:00\][\s\S]*?任务：[\s\S]*?要求：[\s\S]*?完成情况：[\s\S]*?验证：[\s\S]*?状态：已完成 \| 部分完成 \| 受阻[\s\S]*?涉及文件：[\s\S]*?---/);
+  assert.match(changelogSource, /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+09:00\]\n任务：.+\n要求：\n/m);
+  assert.match(changelogSource, /\n完成情况：\n(?:- .+\n)+验证：\n(?:- .+\n)+状态：(已完成|部分完成|受阻)\n涉及文件：\n(?:- .+\n)+---\n?$/);
 });
 
 test("combat runs through explicit planning resolving review and ended phases", () => {
@@ -55,12 +70,17 @@ test("combat runs through explicit planning resolving review and ended phases", 
   assert.match(combatSource, /this\.phase = "ended"/);
 });
 
-test("each round reveals exactly two enemy intents before the player commits", () => {
+test("each round reveals a two-beat thief plan and its conditional branch before commitment", () => {
   assert.match(combatSource, /const PLAN_LIMIT = 2/);
-  assert.match(combatSource, /private chooseEnemyPlan\(\): ActionId\[\]/);
-  assert.match(combatSource, /this\.enemyPlan = this\.chooseEnemyPlan\(\)/);
+  assert.match(combatSource, /type EnemyIntentPlan = \{[\s\S]*?first: ActionId;[\s\S]*?defaultSecond: ActionId;[\s\S]*?trigger: EnemyTrigger/);
+  assert.match(combatSource, /private chooseEnemyPlan\(\): EnemyIntentPlan/);
+  assert.match(combatSource, /this\.enemyIntent = this\.chooseEnemyPlan\(\)/);
+  assert.match(combatSource, /this\.enemyPlan = \[this\.enemyIntent\.first, this\.enemyIntent\.defaultSecond\]/);
   assert.match(combatSource, /this\.text\(204, 130, "敌招\\n意图"/);
   assert.match(combatSource, /this\.enemyPlan\.forEach\(\(actionId, index\)/);
+  assert.match(combatSource, /若\$\{triggerLabel\(branch\.trigger\)\} → \$\{branchAction\.title\}/);
+  assert.match(combatSource, /if \(beat === 1\) this\.resolveEnemySecondAction\(\)/);
+  assert.match(combatSource, /this\.enemyPlan\[1\] = triggered \? branch\.action : this\.enemyIntent\.defaultSecond/);
   assert.match(combatSource, /敌招已明/);
 });
 
@@ -74,8 +94,8 @@ test("every revealed enemy action opens a concrete effect inspector", () => {
   assert.match(combatSource, /"收起"/);
 });
 
-test("opening role choice swaps the complete boxer or swordsman combat kit instead of buffs", () => {
-  assert.match(combatSource, /type PlayerProfessionId = FighterId/);
+test("opening role choice swaps player kits while the opponent remains an independent thief", () => {
+  assert.match(combatSource, /type PlayerProfessionId = "boxer" \| "swordsman"/);
   assert.match(combatSource, /const PLAYER_PROFESSIONS: Record<PlayerProfessionId, ProfessionDef>/);
   assert.match(combatSource, /boxer: \{[\s\S]*?fighterId: "boxer"[\s\S]*?portraitTexture: "duel-boxer-down"/);
   assert.match(combatSource, /swordsman: \{[\s\S]*?fighterId: "swordsman"[\s\S]*?portraitTexture: "duel-swordsman-down"/);
@@ -85,9 +105,11 @@ test("opening role choice swaps the complete boxer or swordsman combat kit inste
   assert.match(combatSource, /private applyProfessionChoice\(professionId: PlayerProfessionId\)/);
   assert.match(combatSource, /this\.player\.id = profession\.fighterId/);
   assert.match(combatSource, /this\.player\.rig\.setArchetype\(profession\.fighterId, "up", fighterTexture\(profession\.fighterId, "up"\)\)/);
+  assert.match(combatSource, /const THIEF_ENEMY: EnemyDef = \{[\s\S]*?fighterId: "thief"[\s\S]*?fighterName: "盗贼 · 夜枭"/);
+  assert.match(combatSource, /private get opponentProfession\(\) \{[\s\S]*?return THIEF_ENEMY/);
   assert.match(combatSource, /this\.enemy\.rig\.setArchetype\(rival\.fighterId, "down", fighterTexture\(rival\.fighterId, "down"\)\)/);
   assert.match(combatSource, /this\.player\.maxHp = profession\.maxHp/);
-  assert.match(combatSource, /人物、动作、牌库与三门绝式都会改变/);
+  assert.match(combatSource, /拳师与剑客只属于玩家；本局敌手固定为盗贼·夜枭/);
   assert.match(combatSource, /this\.add\.image\(94, y, definition\.portraitTexture, 0\)/);
 });
 
@@ -134,7 +156,7 @@ test("distance is a discrete battlefield fact shared by movement and attack rang
   assert.match(combatSource, /distanceDelta: -1/);
   assert.match(combatSource, /distanceDelta: 1/);
   assert.match(combatSource, /minRange: 1,[\s\S]*?maxRange: 1/);
-  assert.match(combatSource, /"enemy-thrust"[\s\S]*?minRange: 2,[\s\S]*?maxRange: 3/);
+  assert.match(combatSource, /"thief-hook"[\s\S]*?minRange: 1,[\s\S]*?maxRange: 3/);
   assert.match(combatSource, /const inRange = this\.distance >= minRange && this\.distance <= maxRange/);
   assert.match(combatSource, /距离\$\{this\.distance\}步/);
 });
@@ -153,7 +175,7 @@ test("guard damage health and momentum all change concrete on-screen state", () 
   assert.match(combatSource, /const broken = action\.pierceGuard \? target\.guard : Math\.min\(target\.guard, guardBreak\)/);
   assert.match(combatSource, /const blocked = action\.pierceGuard \? 0 : Math\.min\(target\.guard, damage\)/);
   assert.match(combatSource, /target\.hp = Math\.max\(0, target\.hp - hpDamage\)/);
-  assert.match(combatSource, /this\.player\.momentum = Math\.min\(MAX_MOMENTUM, this\.player\.momentum \+ gain\)/);
+  assert.match(combatSource, /actor\.momentum = Math\.min\(MAX_MOMENTUM, actor\.momentum \+ gain\)/);
   assert.match(combatSource, /this\.playerHud\.formTexts\.forEach/);
   assert.match(combatSource, /hud\.hpFill, displayWidth/);
   assert.match(combatSource, /this\.spawnFloat\(target\.rig\.root\.x[\s\S]*?`-\$\{hpDamage\}`/);
@@ -167,15 +189,16 @@ test("the two roles own different decks while all six ultimates stay outside the
   assert.doesNotMatch(combatSource, /findIndex\(\(card\) => ACTIONS\[card\.actionId\]\.ultimate\)/);
 });
 
-test("successful cards keep a compact form pool while ultimates span fast advanced and heavy thresholds", () => {
+test("successful cards keep compact form pools while player and thief ultimates use distinct thresholds", () => {
   assert.match(combatSource, /private formTrail: FormGlyph\[\] = \[\]/);
   assert.match(combatSource, /requiresForms: \["架", "化", "冲"\][\s\S]*?requiresMomentum: 4/);
   assert.match(combatSource, /requiresForms: \["探", "封", "刺"\][\s\S]*?requiresMomentum: 4/);
-  assert.equal((combatSource.match(/ultimate: true/g) ?? []).length, 6);
+  assert.equal((combatSource.match(/ultimate: true/g) ?? []).length, 7);
   assert.match(combatSource, /requiresForms: \["截", "肘"\][\s\S]*?requiresMomentum: 3/);
   assert.match(combatSource, /requiresForms: \["架", "化"\][\s\S]*?requiresMomentum: 2/);
   assert.match(combatSource, /requiresForms: \["藏", "刺"\][\s\S]*?requiresMomentum: 3/);
   assert.match(combatSource, /requiresForms: \["封", "化"\][\s\S]*?requiresMomentum: 2/);
+  assert.match(combatSource, /title: "夜枭·三闪夺命"[\s\S]*?requiresForms: \["伏", "诈", "刃"\][\s\S]*?requiresMomentum: 4/);
   assert.match(combatSource, /function ultimateTier\(action: ActionDef\)/);
   assert.match(combatSource, /return "重绝"[\s\S]*?return "进阶"[\s\S]*?return "速绝"/);
   assert.match(combatSource, /`\$\{tier\}·\$\{recipe\}·\$\{action\.requiresMomentum\}势`/);
@@ -186,17 +209,20 @@ test("successful cards keep a compact form pool while ultimates span fast advanc
   assert.match(combatSource, /const missing = required\.filter\(\(glyph\) => !trail\.includes\(glyph\)\)/);
   assert.doesNotMatch(combatSource, /suffix\[index\] !== glyph/);
   assert.match(combatSource, /顺序不限/);
-  assert.match(combatSource, /this\.actionLockReason\(action, this\.formTrail, actor\.momentum, this\.distance\)/);
+  assert.match(combatSource, /const trail = actor === this\.player \? this\.formTrail : this\.enemyFormTrail/);
+  assert.match(combatSource, /this\.actionLockReason\(action, trail, actor\.momentum, this\.distance\)/);
   assert.match(combatSource, /未成式：\$\{reason\}/);
 });
 
-test("new cards create intent counterplay rather than only larger numbers", () => {
+test("player counters and thief branches create intent counterplay rather than only larger numbers", () => {
   assert.match(combatSource, /title: "截步拦门"[\s\S]*?interceptsMove: true/);
   assert.match(combatSource, /opposingAction\?\.type === "move"[\s\S]*?target\.staggeredBeat = beat/);
   assert.match(combatSource, /title: "点剑问路"[\s\S]*?punishesGuard: 8/);
   assert.match(combatSource, /action\.punishesGuard && target\.guard > 0/);
   assert.match(combatSource, /action\.bonusAfterForm && this\.formTrail\.at\(-1\) === action\.bonusAfterForm/);
-  assert.match(combatSource, /if \(this\.enemy\.id === "boxer"\)/);
+  assert.match(combatSource, /title: "钩索封步"[\s\S]*?interceptsMove: true/);
+  assert.match(combatSource, /title: "抛沙诈手"[\s\S]*?punishesParry: 5/);
+  assert.match(combatSource, /title: "探囊夺势"[\s\S]*?stealMomentum: 1[\s\S]*?scatterForm: 1/);
 });
 
 test("each class ultimate consumes its built state and plays a staged multi-hit finisher", () => {
@@ -229,6 +255,10 @@ test("ultimate details explain the full concrete settlement and stay open until 
 });
 
 test("retreat parry and counter rewards are resolved rather than merely described", () => {
+  assert.match(combatSource, /const MAX_RETREAT = 2/);
+  assert.match(combatSource, /actor\.retreat = Math\.max\(0, actor\.retreat - 1\)/);
+  assert.match(combatSource, /actor\.retreat = Math\.min\(MAX_RETREAT, actor\.retreat \+ 1\)/);
+  assert.match(combatSource, /actor\.retreat <= 0[\s\S]*?抵墙/);
   assert.match(combatSource, /actor\.evadeBeat = beat/);
   assert.match(combatSource, /const dodged = target\.evadeBeat === beat && action\.speed < 4/);
   assert.match(combatSource, /actor\.parryReady = true/);
@@ -236,17 +266,23 @@ test("retreat parry and counter rewards are resolved rather than merely describe
   assert.match(combatSource, /target\.momentum = Math\.min\(MAX_MOMENTUM, target\.momentum \+ 2\)/);
   assert.match(combatSource, /this\.roundEvents\.playerParried = true/);
   assert.match(combatSource, /this\.roundEvents\.enemyMissed = true/);
+  assert.match(combatSource, /this\.player\.parryReady[\s\S]*?this\.player\.hp = Math\.max\(0, this\.player\.hp - 3\)/);
+  assert.match(combatSource, /actor === this\.player[\s\S]*?this\.enemy\.momentum = Math\.min\(MAX_MOMENTUM, this\.enemy\.momentum \+ 1\)/);
 });
 
-test("combat uses four directional pose sheets instead of mirroring one orientation", () => {
+test("combat uses directional player and thief pose sheets instead of mirroring one orientation", () => {
   assert.deepEqual(pngSize(swordsmanAtlas), { width: 1024, height: 1024 });
   assert.deepEqual(pngSize(boxerAtlas), { width: 1024, height: 1024 });
   assert.deepEqual(pngSize(swordsmanUpAtlas), { width: 1024, height: 1024 });
   assert.deepEqual(pngSize(boxerDownAtlas), { width: 1024, height: 1024 });
+  assert.deepEqual(pngSize(thiefDownAtlas), { width: 1024, height: 1024 });
+  assert.deepEqual(pngSize(thiefUpAtlas), { width: 1024, height: 1024 });
   assert.match(combatSource, /"duel-swordsman-down"/);
   assert.match(combatSource, /"duel-swordsman-up"/);
   assert.match(combatSource, /"duel-boxer-down"/);
   assert.match(combatSource, /"duel-boxer-up"/);
+  assert.match(combatSource, /"duel-thief-down"/);
+  assert.match(combatSource, /"duel-thief-up"/);
   assert.match(combatSource, /type Facing = "up" \| "down"/);
   assert.match(combatSource, /fighterTexture\(rival\.fighterId, "down"\)/);
   assert.match(combatSource, /fighterTexture\(profession\.fighterId, "up"\)/);
@@ -273,6 +309,8 @@ test("fighter shadows follow per-pose foot anchors instead of one guessed offset
   assert.match(combatSource, /const POSE_METRICS: Record<`\$\{FighterId\}-\$\{Facing\}`/);
   assert.match(combatSource, /"swordsman-up": \[[\s\S]*?footX: 281, footY: 493/);
   assert.match(combatSource, /"boxer-down": \[[\s\S]*?footX: 270, footY: 467/);
+  assert.match(combatSource, /"thief-down": \[[\s\S]*?footX: 382, footY: 493/);
+  assert.match(combatSource, /"thief-up": \[[\s\S]*?footX: 377, footY: 497/);
   assert.match(combatSource, /this\.spriteBaseY = \(256 - metric\.footY\) \* sourceScale/);
   assert.match(combatSource, /this\.shadow\.setPosition\(0, 0\)\.setDisplaySize\(metric\.shadowWidth, metric\.shadowHeight\)/);
   assert.match(combatSource, /metric\.shadowWidth \+ 14/);
@@ -342,8 +380,9 @@ test("guard stance uses a restrained gradient veil and separately stroked broken
   assert.match(combatSource, /fighter\.rig\.setGuarded\(fighter\.guard > 0\)/);
 });
 
-test("sword and fist hit geometry uses transparent-safe glow post effects", () => {
+test("sword fist and thief-knife geometry use transparent-safe glow post effects", () => {
   assert.match(combatSource, /if \(actor\.id === "swordsman"\)/);
+  assert.match(combatSource, /if \(actor\.id === "thief"\)/);
   assert.match(combatSource, /g\.fillStyle\(accent, 0\.22\)\.fillEllipse/);
   assert.match(combatSource, /g\.postFX\.addGlow\(/);
   assert.match(combatSource, /action\.ultimate \? 3\.1 : 1\.55/);
@@ -368,6 +407,8 @@ test("enemy intents expose colored damage defense movement and control tokens", 
   assert.match(combatSource, /action\.distanceDelta < 0 \? "↓1" : "↑1"/);
   assert.match(combatSource, /label: `破\$\{action\.guardBreak\}`, color: DEFENSE_BROWN/);
   assert.match(combatSource, /if \(action\.stagger\) tokens\.push\(\{ label: "断", color: RED \}\)/);
+  assert.match(combatSource, /label: `夺\$\{action\.stealMomentum\}`/);
+  assert.match(combatSource, /label: "诈化"/);
   assert.match(combatSource, /const pill = this\.add\.rectangle\(tokenX, 141, width, 12/);
 });
 

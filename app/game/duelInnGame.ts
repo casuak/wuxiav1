@@ -131,8 +131,8 @@ export class InnModeSelectScene extends ModeUiScene {
       label: "回合制",
       glyph: "武",
       accent: 0xa45142,
-      summary: "拳师或剑客一对一；读敌招、控脚步、搓招式，点燃三门职业绝技。",
-      features: "双职业卡池 · 相对距离 · 公开博弈 · 三绝式",
+      summary: "选择拳师或剑客迎战盗贼；读变招、控退路、搓招式，点燃三门职业绝技。",
+      features: "双职业卡池 · 盗贼敌手 · 条件变招 · 三绝式",
       onTap: () => this.scene.start("inn-duel"),
     });
 

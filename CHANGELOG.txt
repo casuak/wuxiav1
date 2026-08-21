@@ -1,0 +1,24 @@
+[2026-08-21 12:29:55 +09:00]
+任务：设计独立盗贼敌人与攻防博弈系统
+要求：
+- 按既定攻防策略提高公开意图下的战斗决策深度。
+- 设计区别于拳师、剑客玩家角色的独立盗贼敌人及对应形象。
+- 在 README 中规定每轮任务完成后记录要求和完成情况，并统一 CHANGELOG.txt 格式。
+完成情况：
+- 新增盗贼“夜枭”、独立招式组、双朝向动作贴图、三格招式谱、势与专属重绝。
+- 敌方意图改为公开起手、默认合手与条件变招，并加入玩家行为识破提示。
+- 加入双方退路、抵墙破绽、防守代价、化劲落空、敌方积势与夺势震式等结算。
+- 更新战斗入口文案、回归契约和 README 开发记录规范。
+验证：
+- Node.js 测试：52 项全部通过。
+- ESLint：通过。
+状态：已完成
+涉及文件：
+- app/game/duelCombatScene.ts
+- app/game/duelInnGame.ts
+- public/assets/combat/thief-turn-poses-down.png
+- public/assets/combat/thief-turn-poses-up.png
+- tests/duel-mode-contract.test.mjs
+- README.md
+- CHANGELOG.txt
+---
