@@ -58,3 +58,51 @@
 - README.md
 - CHANGELOG.txt
 ---
+[2026-08-21 17:08:47 +08:00]
+任务：补充 README 存档机制说明
+要求：
+- 更新 README 中关于存档机制的实现设计。
+- 仅简短说明技术原理。
+完成情况：
+- 新增“存档机制”章节，说明经营状态通过 JSON 序列化自动写入浏览器 localStorage。
+- 简述独立存档键、版本与关键字段校验、默认值补全及异常回退策略。
+- 明确存档属于浏览器本地数据，不提供账号云同步，武侠战斗不写入经营存档。
+验证：
+- 对照 campaignInnGame.ts 与 deckInnGame.ts 的实际读写逻辑核验文档描述。
+- Node.js 测试：54 项全部通过。
+状态：已完成
+涉及文件：
+- README.md
+- CHANGELOG.txt
+---
+[2026-08-21 17:24:29 +08:00]
+任务：提交并推送存档机制文档
+要求：
+- 提交并推送上一轮 README 存档机制说明。
+完成情况：
+- 提交范围限定为 README.md 与 CHANGELOG.txt，不包含其他项目改动。
+- 创建 docs/save-mechanism-readme 文档分支并推送到 GitHub。
+验证：
+- 核对 GitHub main 分支基线及目标文件内容。
+- 提交树仅包含 README.md 与 CHANGELOG.txt 两个文件的更新。
+状态：已完成
+涉及文件：
+- README.md
+- CHANGELOG.txt
+---
+[2026-08-21 17:32:25 +08:00]
+任务：合并存档机制文档到主分支
+要求：
+- 将 docs/save-mechanism-readme 分支合并到 main 并推送。
+完成情况：
+- 保留 main 已有的 UTC+8 开发记录规范与时区修正。
+- 合入 README 存档机制说明及文档分支任务记录，并将新增记录换算为 UTC+8。
+- 创建双父合并提交并更新远端 main 分支。
+验证：
+- 合并前分支比较：main 与文档分支各有 1 个独立提交。
+- 合并范围核对：仅 README.md 与 CHANGELOG.txt 发生内容变化。
+状态：已完成
+涉及文件：
+- README.md
+- CHANGELOG.txt
+---
