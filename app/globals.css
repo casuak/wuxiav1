@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #202018;
+  --paper: #fff4bf;
+  --paper-deep: #d8d59a;
+  --cinnabar: #a54b3b;
+  --muted: #5f6043;
+  --olive: #a5a873;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background: var(--olive);
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 50% 9%, rgba(255, 244, 191, 0.36), transparent 24rem),
+    conic-gradient(from 90deg at 1px 1px, #9da16a 25%, #afb276 0 50%, #9da16a 0 75%, #afb276 0) 0 0 / 30px 30px;
+  min-height: 100svh;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, canvas { font: inherit; }
+
+.game-page {
+  width: min(100%, 520px);
+  min-height: 100svh;
+  margin: 0 auto;
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+}
+
+.site-header {
+  width: min(100%, 430px);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink);
+  min-height: 52px;
+  padding: 7px 10px;
+  background: #c8b96c;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  box-shadow: 3px 3px 0 rgba(32, 32, 24, 0.9);
+}
+
+.brand-lockup { display: flex; align-items: center; gap: 13px; }
+
+.brand-seal {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: #fff4bf;
+  background: var(--ink);
+  border: 2px solid #fff4bf;
+  outline: 2px solid var(--ink);
+  border-radius: 50%;
+  box-shadow: none;
+  font-size: 20px;
+  transform: rotate(-2deg);
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  color: #595a3e;
+  font: 600 11px/1.1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.24em;
+}
+
+.site-header h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-shadow: none;
+}
+
+.day-badge {
+  margin: 0;
+  padding: 7px 9px;
+  color: var(--ink);
+  background: #fff4bf;
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+  font: 700 10px/1 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.game-shell { min-height: 0; display: grid; place-items: center; }
+
+.canvas-frame {
+  position: relative;
+  width: min(100%, 430px, calc((100svh - 116px) / 2));
+  aspect-ratio: 1 / 2;
+  overflow: hidden;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 5px 6px 0 rgba(32, 32, 24, 0.9);
+  touch-action: none;
+  contain: layout paint size;
+}
+
+.canvas-frame::after {
+  display: none;
+}
+
+.phaser-host, .phaser-host canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.loading-card {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 4;
+  width: 200px;
+  min-height: 138px;
+  transform: translate(-50%, -50%) rotate(-1deg);
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  padding: 20px;
+  background: #fff4bf;
+  border: 3px solid var(--ink);
+  border-radius: 3px;
+  box-shadow: 7px 7px 0 var(--ink);
+}
+
+.loading-card strong { font-size: 18px; }
+.loading-card small { color: var(--muted); }
+
+.loading-steam {
+  color: var(--cinnabar);
+  font-size: 32px;
+  animation: steam 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes steam {
+  to { transform: translateY(-5px) scaleX(1.08); opacity: 0.5; }
+}
+
+.site-footer {
+  width: min(100%, 430px);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: #fff4bf;
+  padding: 5px 8px;
+  background: rgba(32, 32, 24, 0.92);
+  border: 2px solid #202018;
+  font: 600 10px/1.35 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.site-footer p { margin: 0; }
+
+@media (max-width: 720px) {
+  .game-page {
+    width: 100%;
+    padding:
+      max(3px, env(safe-area-inset-top))
+      max(3px, env(safe-area-inset-right))
+      max(3px, env(safe-area-inset-bottom))
+      max(3px, env(safe-area-inset-left));
+    grid-template-rows: 1fr;
+    gap: 0;
+  }
+
+  .site-header, .site-footer { display: none; }
+
+  .canvas-frame {
+    width: min(100%, 430px, calc((100svh - 8px) / 2));
+    border-width: 2px;
+    border-radius: 8px;
+    box-shadow: 3px 4px 0 rgba(32, 32, 24, 0.88);
+  }
+}
+
+@media (max-height: 700px) {
+  .site-header, .site-footer { display: none; }
+  .canvas-frame { width: min(100%, 430px, calc((100svh - 8px) / 2)); }
+}
